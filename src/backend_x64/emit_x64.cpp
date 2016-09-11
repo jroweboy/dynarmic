@@ -4,14 +4,18 @@
  * General Public License version 2 or any later version.
  */
 
-#include <map>
 #include <unordered_map>
 #include <common/bit_util.h>
+
+#include <xbyak.h>
 
 #include "backend_x64/abi.h"
 #include "backend_x64/emit_x64.h"
 #include "backend_x64/jitstate.h"
-#include "frontend/arm_types.h"
+#include "frontend/arm/types.h"
+#include "frontend/ir/basic_block.h"
+#include "frontend/ir/location_descriptor.h"
+#include "frontend/ir/microinstruction.h"
 
 // TODO: Have ARM flags in host flags and not have them use up GPR registers unless necessary.
 // TODO: Actually implement that proper instruction selector you've always wanted to sweetheart.
@@ -26,11 +30,11 @@ static Xbyak::Address MJitStateReg(Arm::Reg reg) {
 
 static Xbyak::Address MJitStateExtReg(Arm::ExtReg reg) {
     using namespace Xbyak::util;
-    if (reg >= Arm::ExtReg::S0 && reg <= Arm::ExtReg::S31) {
+    if (Arm::IsSingleExtReg(reg)) {
         size_t index = static_cast<size_t>(reg) - static_cast<size_t>(Arm::ExtReg::S0);
         return dword[r15 + offsetof(JitState, ExtReg) + sizeof(u32) * index];
     }
-    if (reg >= Arm::ExtReg::D0 && reg <= Arm::ExtReg::D31) {
+    if (Arm::IsDoubleExtReg(reg)) {
         size_t index = static_cast<size_t>(reg) - static_cast<size_t>(Arm::ExtReg::D0);
         return qword[r15 + offsetof(JitState, ExtReg) + sizeof(u64) * index];
     }
@@ -47,7 +51,7 @@ static void EraseInstruction(IR::Block& block, IR::Inst* inst) {
 }
 
 EmitX64::BlockDescriptor EmitX64::Emit(IR::Block& block) {
-    const Arm::LocationDescriptor descriptor = block.Location();
+    const IR::LocationDescriptor descriptor = block.Location();
 
     reg_alloc.Reset();
 
@@ -108,7 +112,7 @@ void EmitX64::EmitGetRegister(IR::Block&, IR::Inst* inst) {
 
 void EmitX64::EmitGetExtendedRegister32(IR::Block& block, IR::Inst* inst) {
     Arm::ExtReg reg = inst->GetArg(0).GetExtRegRef();
-    ASSERT(reg >= Arm::ExtReg::S0 && reg <= Arm::ExtReg::S31);
+    ASSERT(Arm::IsSingleExtReg(reg));
 
     Xbyak::Xmm result = reg_alloc.DefXmm(inst);
     code->movss(result, MJitStateExtReg(reg));
@@ -116,7 +120,7 @@ void EmitX64::EmitGetExtendedRegister32(IR::Block& block, IR::Inst* inst) {
 
 void EmitX64::EmitGetExtendedRegister64(IR::Block&, IR::Inst* inst) {
     Arm::ExtReg reg = inst->GetArg(0).GetExtRegRef();
-    ASSERT(reg >= Arm::ExtReg::D0 && reg <= Arm::ExtReg::D31);
+    ASSERT(Arm::IsDoubleExtReg(reg));
     Xbyak::Xmm result = reg_alloc.DefXmm(inst);
     code->movsd(result, MJitStateExtReg(reg));
 }
@@ -134,14 +138,14 @@ void EmitX64::EmitSetRegister(IR::Block&, IR::Inst* inst) {
 
 void EmitX64::EmitSetExtendedRegister32(IR::Block&, IR::Inst* inst) {
     Arm::ExtReg reg = inst->GetArg(0).GetExtRegRef();
-    ASSERT(reg >= Arm::ExtReg::S0 && reg <= Arm::ExtReg::S31);
+    ASSERT(Arm::IsSingleExtReg(reg));
     Xbyak::Xmm source = reg_alloc.UseXmm(inst->GetArg(1));
     code->movss(MJitStateExtReg(reg), source);
 }
 
 void EmitX64::EmitSetExtendedRegister64(IR::Block&, IR::Inst* inst) {
     Arm::ExtReg reg = inst->GetArg(0).GetExtRegRef();
-    ASSERT(reg >= Arm::ExtReg::D0 && reg <= Arm::ExtReg::D31);
+    ASSERT(Arm::IsDoubleExtReg(reg));
     Xbyak::Xmm source = reg_alloc.UseXmm(inst->GetArg(1));
     code->movsd(MJitStateExtReg(reg), source);
 }
@@ -362,7 +366,7 @@ void EmitX64::EmitGetFpscrNZCV(IR::Block&, IR::Inst* inst) {
 
     Xbyak::Reg32 result = reg_alloc.DefGpr(inst).cvt32();
 
-    code->mov(result, dword[r15 + offsetof(JitState, guest_FPSCR_nzcv)]);
+    code->mov(result, dword[r15 + offsetof(JitState, FPSCR_nzcv)]);
 }
 
 void EmitX64::EmitSetFpscrNZCV(IR::Block&, IR::Inst* inst) {
@@ -370,7 +374,7 @@ void EmitX64::EmitSetFpscrNZCV(IR::Block&, IR::Inst* inst) {
 
     Xbyak::Reg32 value = reg_alloc.UseGpr(inst->GetArg(0)).cvt32();
 
-    code->mov(dword[r15 + offsetof(JitState, guest_FPSCR_nzcv)], value);
+    code->mov(dword[r15 + offsetof(JitState, FPSCR_nzcv)], value);
 }
 
 void EmitX64::EmitPushRSB(IR::Block&, IR::Inst* inst) {
@@ -2153,7 +2157,7 @@ void EmitX64::EmitCondPrelude(const IR::Block& block) {
     code->L(pass);
 }
 
-void EmitX64::EmitTerminal(IR::Terminal terminal, Arm::LocationDescriptor initial_location) {
+void EmitX64::EmitTerminal(IR::Terminal terminal, IR::LocationDescriptor initial_location) {
     switch (terminal.which()) {
     case 1:
         EmitTerminalInterpret(boost::get<IR::Term::Interpret>(terminal), initial_location);
@@ -2182,7 +2186,7 @@ void EmitX64::EmitTerminal(IR::Terminal terminal, Arm::LocationDescriptor initia
     }
 }
 
-void EmitX64::EmitTerminalInterpret(IR::Term::Interpret terminal, Arm::LocationDescriptor initial_location) {
+void EmitX64::EmitTerminalInterpret(IR::Term::Interpret terminal, IR::LocationDescriptor initial_location) {
     ASSERT_MSG(terminal.next.TFlag() == initial_location.TFlag(), "Unimplemented");
     ASSERT_MSG(terminal.next.EFlag() == initial_location.EFlag(), "Unimplemented");
 
@@ -2195,11 +2199,11 @@ void EmitX64::EmitTerminalInterpret(IR::Term::Interpret terminal, Arm::LocationD
     code->ReturnFromRunCode(false); // TODO: Check cycles
 }
 
-void EmitX64::EmitTerminalReturnToDispatch(IR::Term::ReturnToDispatch, Arm::LocationDescriptor initial_location) {
+void EmitX64::EmitTerminalReturnToDispatch(IR::Term::ReturnToDispatch, IR::LocationDescriptor initial_location) {
     code->ReturnFromRunCode();
 }
 
-void EmitX64::EmitTerminalLinkBlock(IR::Term::LinkBlock terminal, Arm::LocationDescriptor initial_location) {
+void EmitX64::EmitTerminalLinkBlock(IR::Term::LinkBlock terminal, IR::LocationDescriptor initial_location) {
     using namespace Xbyak::util;
 
     if (terminal.next.TFlag() != initial_location.TFlag()) {
@@ -2230,7 +2234,7 @@ void EmitX64::EmitTerminalLinkBlock(IR::Term::LinkBlock terminal, Arm::LocationD
     code->ReturnFromRunCode(); // TODO: Check cycles, Properly do a link
 }
 
-void EmitX64::EmitTerminalLinkBlockFast(IR::Term::LinkBlockFast terminal, Arm::LocationDescriptor initial_location) {
+void EmitX64::EmitTerminalLinkBlockFast(IR::Term::LinkBlockFast terminal, IR::LocationDescriptor initial_location) {
     using namespace Xbyak::util;
 
     if (terminal.next.TFlag() != initial_location.TFlag()) {
@@ -2260,7 +2264,7 @@ void EmitX64::EmitTerminalLinkBlockFast(IR::Term::LinkBlockFast terminal, Arm::L
     }
 }
 
-void EmitX64::EmitTerminalPopRSBHint(IR::Term::PopRSBHint, Arm::LocationDescriptor initial_location) {
+void EmitX64::EmitTerminalPopRSBHint(IR::Term::PopRSBHint, IR::LocationDescriptor initial_location) {
     using namespace Xbyak::util;
 
     // This calculation has to match up with IREmitter::PushRSB
@@ -2268,7 +2272,7 @@ void EmitX64::EmitTerminalPopRSBHint(IR::Term::PopRSBHint, Arm::LocationDescript
     code->mov(ecx, MJitStateReg(Arm::Reg::PC));
     code->and_(ebx, u32((1 << 5) | (1 << 9)));
     code->shr(ebx, 2);
-    code->or_(ebx, dword[r15 + offsetof(JitState, guest_FPSCR_mode)]);
+    code->or_(ebx, dword[r15 + offsetof(JitState, FPSCR_mode)]);
     code->shl(rbx, 32);
     code->or_(rbx, rcx);
 
@@ -2281,14 +2285,14 @@ void EmitX64::EmitTerminalPopRSBHint(IR::Term::PopRSBHint, Arm::LocationDescript
     code->jmp(rax);
 }
 
-void EmitX64::EmitTerminalIf(IR::Term::If terminal, Arm::LocationDescriptor initial_location) {
+void EmitX64::EmitTerminalIf(IR::Term::If terminal, IR::LocationDescriptor initial_location) {
     Xbyak::Label pass = EmitCond(code, terminal.if_);
     EmitTerminal(terminal.else_, initial_location);
     code->L(pass);
     EmitTerminal(terminal.then_, initial_location);
 }
 
-void EmitX64::EmitTerminalCheckHalt(IR::Term::CheckHalt terminal, Arm::LocationDescriptor initial_location) {
+void EmitX64::EmitTerminalCheckHalt(IR::Term::CheckHalt terminal, IR::LocationDescriptor initial_location) {
     using namespace Xbyak::util;
 
     code->cmp(code->byte[r15 + offsetof(JitState, halt_requested)], u8(0));
@@ -2296,7 +2300,7 @@ void EmitX64::EmitTerminalCheckHalt(IR::Term::CheckHalt terminal, Arm::LocationD
     EmitTerminal(terminal.else_, initial_location);
 }
 
-void EmitX64::Patch(Arm::LocationDescriptor desc, CodePtr bb) {
+void EmitX64::Patch(IR::LocationDescriptor desc, CodePtr bb) {
     using namespace Xbyak::util;
 
     const CodePtr save_code_ptr = code->getCurr();

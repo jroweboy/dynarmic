@@ -6,9 +6,8 @@
 
 #pragma once
 
+#include <cstddef>
 #include <vector>
-
-#include "common/common_types.h"
 
 namespace Dynarmic {
 namespace Common {
@@ -29,6 +28,11 @@ public:
     void* Alloc();
 
 private:
+    // Allocates a completely new memory slab.
+    // Used when an entirely new slab is needed
+    // due the current one running out of usable space.
+    void AllocateNewSlab();
+
     size_t object_size;
     size_t slab_size;
     char* current_slab;

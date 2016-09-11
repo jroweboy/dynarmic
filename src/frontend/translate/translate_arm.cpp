@@ -7,17 +7,18 @@
 #include <algorithm>
 
 #include "common/assert.h"
-#include "frontend/arm_types.h"
+#include "frontend/arm/types.h"
 #include "frontend/decoder/arm.h"
 #include "frontend/decoder/vfp2.h"
 #include "frontend/ir/basic_block.h"
+#include "frontend/ir/location_descriptor.h"
 #include "frontend/translate/translate.h"
 #include "frontend/translate/translate_arm/translate_arm.h"
 
 namespace Dynarmic {
 namespace Arm {
 
-static bool CondCanContinue(ConditionalState cond_state, IR::IREmitter& ir) {
+static bool CondCanContinue(ConditionalState cond_state, const IR::IREmitter& ir) {
     ASSERT_MSG(cond_state != ConditionalState::Break, "Should never happen.");
 
     if (cond_state == ConditionalState::None)
@@ -27,7 +28,7 @@ static bool CondCanContinue(ConditionalState cond_state, IR::IREmitter& ir) {
     return std::all_of(ir.block.begin(), ir.block.end(), [](const IR::Inst& inst) { return !inst.WritesToCPSR(); });
 }
 
-IR::Block TranslateArm(LocationDescriptor descriptor, MemoryRead32FuncType memory_read_32) {
+IR::Block TranslateArm(IR::LocationDescriptor descriptor, MemoryRead32FuncType memory_read_32) {
     ArmTranslatorVisitor visitor{descriptor};
 
     bool should_continue = true;

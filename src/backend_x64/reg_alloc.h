@@ -7,7 +7,6 @@
 #pragma once
 
 #include <array>
-#include <map>
 #include <vector>
 
 #include <boost/optional.hpp>
@@ -15,7 +14,6 @@
 
 #include "backend_x64/block_of_code.h"
 #include "backend_x64/hostloc.h"
-#include "backend_x64/jitstate.h"
 #include "common/common_types.h"
 #include "frontend/ir/microinstruction.h"
 #include "frontend/ir/value.h"
@@ -24,17 +22,17 @@ namespace Dynarmic {
 namespace BackendX64 {
 
 struct OpArg {
-    OpArg() : type(OPERAND), inner_operand() {}
-    OpArg(const Xbyak::Address& address) : type(ADDRESS), inner_address(address) {}
-    OpArg(const Xbyak::Reg& reg) : type(REG), inner_reg(reg) {}
+    OpArg() : type(Type::Operand), inner_operand() {}
+    /* implicit */ OpArg(const Xbyak::Address& address) : type(Type::Address), inner_address(address) {}
+    /* implicit */ OpArg(const Xbyak::Reg& reg) : type(Type::Reg), inner_reg(reg) {}
 
     Xbyak::Operand& operator*() {
         switch (type) {
-        case ADDRESS:
+        case Type::Address:
             return inner_address;
-        case OPERAND:
+        case Type::Operand:
             return inner_operand;
-        case REG:
+        case Type::Reg:
             return inner_reg;
         }
         ASSERT_MSG(false, "Unreachable");
@@ -42,13 +40,13 @@ struct OpArg {
 
     void setBit(int bits) {
         switch (type) {
-        case ADDRESS:
+        case Type::Address:
             inner_address.setBit(bits);
             return;
-        case OPERAND:
+        case Type::Operand:
             inner_operand.setBit(bits);
             return;
-        case REG:
+        case Type::Reg:
             switch (bits) {
             case 8:
                 inner_reg = inner_reg.cvt8();
@@ -71,11 +69,13 @@ struct OpArg {
     }
 
 private:
-    enum {
-        OPERAND,
-        ADDRESS,
-        REG,
-    } type;
+    enum class Type {
+        Operand,
+        Address,
+        Reg,
+    };
+
+    Type type;
 
     union {
         Xbyak::Operand inner_operand;
@@ -86,7 +86,7 @@ private:
 
 class RegAlloc final {
 public:
-    RegAlloc(BlockOfCode* code) : code(code) {}
+    explicit RegAlloc(BlockOfCode* code) : code(code) {}
 
     /// Late-def
     Xbyak::Reg64 DefGpr(IR::Inst* def_inst, HostLocList desired_locations = any_gpr) {
@@ -156,7 +156,7 @@ private:
     boost::optional<HostLoc> ValueLocation(const IR::Inst* value) const;
     bool IsRegisterOccupied(HostLoc loc) const;
     bool IsRegisterAllocated(HostLoc loc) const;
-    bool IsLastUse(IR::Inst* inst) const;
+    bool IsLastUse(const IR::Inst* inst) const;
 
     HostLoc DefHostLocReg(IR::Inst* def_inst, HostLocList desired_locations);
     HostLoc UseDefHostLocReg(IR::Value use_value, IR::Inst* def_inst, HostLocList desired_locations);

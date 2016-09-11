@@ -15,8 +15,8 @@
 
 namespace Dynarmic {
 
-namespace Arm {
-struct LocationDescriptor;
+namespace IR {
+class LocationDescriptor;
 }
 
 class Jit final {
@@ -34,7 +34,7 @@ public:
 
     /**
      * Clears the code cache of all compiled code.
-     * Cannot be called from a callback.
+     * Can be called at any time. Halts execution if called within a callback.
      */
     void ClearCache();
 
@@ -76,7 +76,7 @@ public:
      * @param descriptor Basic block descriptor.
      * @return A string containing disassembly of the host machine code produced for the basic block.
      */
-    std::string Disassemble(const Arm::LocationDescriptor& descriptor);
+    std::string Disassemble(const IR::LocationDescriptor& descriptor);
 
 private:
     bool is_executing = false;

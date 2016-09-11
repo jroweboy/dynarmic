@@ -7,11 +7,12 @@ set(SRCS
     backend_x64/jitstate.cpp
     backend_x64/reg_alloc.cpp
     common/memory_pool.cpp
-    frontend/arm_types.cpp
+    frontend/arm/types.cpp
     frontend/disassembler/disassembler_arm.cpp
     frontend/disassembler/disassembler_thumb.cpp
     frontend/ir/basic_block.cpp
     frontend/ir/ir_emitter.cpp
+    frontend/ir/location_descriptor.cpp
     frontend/ir/microinstruction.cpp
     frontend/ir/opcodes.cpp
     frontend/ir/value.cpp
@@ -54,7 +55,8 @@ set(HEADERS
     common/scope_exit.h
     common/string_util.h
     frontend/arm/FPSCR.h
-    frontend/arm_types.h
+    frontend/arm/PSR.h
+    frontend/arm/types.h
     frontend/decoder/arm.h
     frontend/decoder/decoder_detail.h
     frontend/decoder/thumb16.h
@@ -63,6 +65,7 @@ set(HEADERS
     frontend/disassembler/disassembler.h
     frontend/ir/basic_block.h
     frontend/ir/ir_emitter.h
+    frontend/ir/location_descriptor.h
     frontend/ir/microinstruction.h
     frontend/ir/opcodes.h
     frontend/ir/terminal.h

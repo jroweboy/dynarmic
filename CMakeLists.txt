@@ -1,9 +1,10 @@
-cmake_minimum_required(VERSION 3.4.1)
+cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
 project(dynarmic CXX)
 
 # Dynarmic project options
 option(DYNARMIC_USE_SYSTEM_BOOST "Use the system boost libraries" ON)
 option(DYNARMIC_USE_LLVM "Support disassembly of jitted x86_64 code using LLVM" OFF)
+option(DYNARMIC_TESTS "Build tests" ON)
 
 # Set hard requirements for C++
 set(CMAKE_CXX_STANDARD 14)
@@ -25,7 +26,16 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
 
 # Compiler flags
 if (MSVC)
-    add_compile_options(/W3 /MP /Zi /Zo /EHsc /WX)
+    add_compile_options(/W3
+                        /w34456 # Declaration of 'var' hides previous local declaration
+                        /w34457 # Declaration of 'var' hides function parameter
+                        /w34458 # Declaration of 'var' hides class member
+                        /w34459 # Declaration of 'var' hides global definition
+                        /MP
+                        /Zi
+                        /Zo
+                        /EHsc
+                        /WX)
     add_compile_options(/DNOMINMAX)
 else()
     add_compile_options(-Wall
@@ -40,7 +50,7 @@ else()
     add_compile_options(-fno-operator-names)
 
     if (ARCHITECTURE_x86_64)
-        add_compile_options(-msse4.1)
+        add_compile_options(-msse2)
     endif()
 endif()
 
@@ -92,4 +102,6 @@ add_subdirectory(externals)
 
 # Dynarmic project files
 add_subdirectory(src)
-add_subdirectory(tests)
+if (DYNARMIC_TESTS)
+    add_subdirectory(tests)
+endif()

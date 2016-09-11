@@ -110,7 +110,7 @@ static void Fail() {
 static Dynarmic::UserCallbacks GetUserCallbacks() {
     Dynarmic::UserCallbacks user_callbacks{};
     user_callbacks.InterpreterFallback = &InterpreterFallback;
-    user_callbacks.CallSVC = (bool (*)(u32)) &Fail;
+    user_callbacks.CallSVC = (void (*)(u32)) &Fail;
     user_callbacks.IsReadOnlyMemory = &IsReadOnlyMemory;
     user_callbacks.MemoryRead8 = &MemoryRead8;
     user_callbacks.MemoryRead16 = &MemoryRead16;
@@ -244,7 +244,10 @@ void FuzzJitThumb(const size_t instruction_count, const size_t instructions_to_e
                 printf("%zu [%x] = %" PRIu64 "\n", record.size, record.address, record.data);
             }
 
-            Dynarmic::IR::Block ir_block = Dynarmic::Arm::Translate({0, true, false, 0}, MemoryRead32);
+            Dynarmic::Arm::PSR cpsr;
+            cpsr.T(true);
+
+            Dynarmic::IR::Block ir_block = Dynarmic::Arm::Translate({0, cpsr, Dynarmic::Arm::FPSCR{}}, MemoryRead32);
             Dynarmic::Optimization::GetSetElimination(ir_block);
             Dynarmic::Optimization::DeadCodeElimination(ir_block);
             Dynarmic::Optimization::VerificationPass(ir_block);

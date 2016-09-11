@@ -6,10 +6,11 @@
 
 #pragma once
 
+#include <bitset>
 #include <climits>
+#include <cstddef>
 
 #include "common/assert.h"
-#include "common/common_types.h"
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -71,12 +72,9 @@ inline T SignExtend(const T value) {
     return value;
 }
 
-inline size_t BitCount(u32 value) {
-#ifdef _MSC_VER
-    return __popcnt(value);
-#else
-    return __builtin_popcount(value);
-#endif
+template <typename Integral>
+inline size_t BitCount(Integral value) {
+    return std::bitset<BitSize<Integral>()>(value).count();
 }
 
 } // namespace Common

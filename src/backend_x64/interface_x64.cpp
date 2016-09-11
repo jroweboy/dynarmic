@@ -17,11 +17,11 @@
 #include "backend_x64/emit_x64.h"
 #include "backend_x64/jitstate.h"
 #include "common/assert.h"
-#include "common/bit_util.h"
 #include "common/common_types.h"
 #include "common/scope_exit.h"
 #include "dynarmic/dynarmic.h"
-#include "frontend/arm_types.h"
+#include "frontend/ir/basic_block.h"
+#include "frontend/ir/location_descriptor.h"
 #include "frontend/translate/translate.h"
 #include "ir_opt/passes.h"
 
@@ -42,18 +42,18 @@ struct Jit::Impl {
     EmitX64 emitter;
     const UserCallbacks callbacks;
 
+    bool clear_cache_required = false;
+
     size_t Execute(size_t cycle_count) {
         u32 pc = jit_state.Reg[15];
-        bool TFlag = Common::Bit<5>(jit_state.Cpsr);
-        bool EFlag = Common::Bit<9>(jit_state.Cpsr);
 
-        Arm::LocationDescriptor descriptor{pc, TFlag, EFlag, jit_state.guest_FPSCR_mode};
+        IR::LocationDescriptor descriptor{pc, Arm::PSR{jit_state.Cpsr}, Arm::FPSCR{jit_state.FPSCR_mode}};
 
         CodePtr code_ptr = GetBasicBlock(descriptor).code_ptr;
         return block_of_code.RunCode(&jit_state, code_ptr, cycle_count);
     }
 
-    std::string Disassemble(const Arm::LocationDescriptor& descriptor) {
+    std::string Disassemble(const IR::LocationDescriptor& descriptor) {
         auto block = GetBasicBlock(descriptor);
         std::string result = fmt::format("address: {}\nsize: {} bytes\n", block.code_ptr, block.size);
 
@@ -90,8 +90,15 @@ struct Jit::Impl {
         return result;
     }
 
+    void ClearCache() {
+        block_of_code.ClearCache();
+        emitter.ClearCache();
+        jit_state.ResetRSB();
+        clear_cache_required = false;
+    }
+
 private:
-    EmitX64::BlockDescriptor GetBasicBlock(Arm::LocationDescriptor descriptor) {
+    EmitX64::BlockDescriptor GetBasicBlock(IR::LocationDescriptor descriptor) {
         auto block = emitter.GetBasicBlock(descriptor);
         if (block)
             return *block;
@@ -120,14 +127,21 @@ size_t Jit::Run(size_t cycle_count) {
         cycles_executed += impl->Execute(cycle_count - cycles_executed);
     }
 
+    if (impl->clear_cache_required) {
+        impl->ClearCache();
+    }
+
     return cycles_executed;
 }
 
 void Jit::ClearCache() {
-    ASSERT(!is_executing);
-    impl->block_of_code.ClearCache();
-    impl->emitter.ClearCache();
-    impl->jit_state.ResetRSB();
+    if (is_executing) {
+        impl->jit_state.halt_requested = true;
+        impl->clear_cache_required = true;
+        return;
+    }
+
+    impl->ClearCache();
 }
 
 void Jit::Reset() {
@@ -173,7 +187,7 @@ void Jit::SetFpscr(u32 value) const {
     return impl->jit_state.SetFpscr(value);
 }
 
-std::string Jit::Disassemble(const Arm::LocationDescriptor& descriptor) {
+std::string Jit::Disassemble(const IR::LocationDescriptor& descriptor) {
     return impl->Disassemble(descriptor);
 }
 

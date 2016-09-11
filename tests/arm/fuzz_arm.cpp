@@ -19,9 +19,9 @@
 
 #include "common/bit_util.h"
 #include "common/common_types.h"
-#include "frontend/arm_types.h"
 #include "frontend/disassembler/disassembler.h"
 #include "frontend/ir/basic_block.h"
+#include "frontend/ir/location_descriptor.h"
 #include "frontend/translate/translate.h"
 #include "ir_opt/passes.h"
 #include "rand_int.h"
@@ -122,7 +122,7 @@ static void Fail() {
 static Dynarmic::UserCallbacks GetUserCallbacks() {
     Dynarmic::UserCallbacks user_callbacks{};
     user_callbacks.InterpreterFallback = &InterpreterFallback;
-    user_callbacks.CallSVC = (bool (*)(u32)) &Fail;
+    user_callbacks.CallSVC = (void (*)(u32)) &Fail;
     user_callbacks.IsReadOnlyMemory = &IsReadOnlyMemory;
     user_callbacks.MemoryRead8 = &MemoryRead8;
     user_callbacks.MemoryRead16 = &MemoryRead16;
@@ -291,7 +291,7 @@ void FuzzJitArm(const size_t instruction_count, const size_t instructions_to_exe
 
             size_t num_insts = 0;
             while (num_insts < instructions_to_execute_count) {
-                Dynarmic::Arm::LocationDescriptor descriptor = {u32(num_insts * 4), false, false, 0};
+                Dynarmic::IR::LocationDescriptor descriptor = {u32(num_insts * 4), Dynarmic::Arm::PSR{}, Dynarmic::Arm::FPSCR{}};
                 Dynarmic::IR::Block ir_block = Dynarmic::Arm::Translate(descriptor, &MemoryRead32);
                 Dynarmic::Optimization::GetSetElimination(ir_block);
                 Dynarmic::Optimization::DeadCodeElimination(ir_block);

@@ -9,9 +9,8 @@
 #include <initializer_list>
 
 #include "common/common_types.h"
-#include "frontend/arm_types.h"
 #include "frontend/ir/basic_block.h"
-#include "frontend/ir/opcodes.h"
+#include "frontend/ir/location_descriptor.h"
 #include "frontend/ir/terminal.h"
 #include "frontend/ir/value.h"
 
@@ -25,6 +24,8 @@
 namespace Dynarmic {
 namespace IR {
 
+enum class Opcode;
+
 /**
  * Convenience class to construct a basic block of the intermediate representation.
  * `block` is the resulting block.
@@ -32,10 +33,10 @@ namespace IR {
  */
 class IREmitter {
 public:
-    explicit IREmitter(Arm::LocationDescriptor descriptor) : block(descriptor), current_location(descriptor) {}
+    explicit IREmitter(LocationDescriptor descriptor) : block(descriptor), current_location(descriptor) {}
 
     Block block;
-    Arm::LocationDescriptor current_location;
+    LocationDescriptor current_location;
 
     struct ResultAndCarry {
         Value result;
@@ -66,7 +67,7 @@ public:
     void BXWritePC(const Value& value);
     void LoadWritePC(const Value& value);
     void CallSupervisor(const Value& value);
-    void PushRSB(const Arm::LocationDescriptor& return_location);
+    void PushRSB(const LocationDescriptor& return_location);
 
     Value GetCpsr();
     void SetCpsr(const Value& value);
@@ -156,7 +157,7 @@ public:
     Value FPS32ToDouble(const Value& a, bool round_to_nearest, bool fpscr_controlled);
     Value FPU32ToDouble(const Value& a, bool round_to_nearest, bool fpscr_controlled);
 
-    void ClearExlcusive();
+    void ClearExclusive();
     void SetExclusive(const Value& vaddr, size_t byte_size);
     Value ReadMemory8(const Value& vaddr);
     Value ReadMemory16(const Value& vaddr);
