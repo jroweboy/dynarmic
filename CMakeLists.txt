@@ -107,7 +107,7 @@ endif()
 message(STATUS "Target architecture: ${ARCHITECTURE}")
 
 # Include Boost
-if (NOT TARGET boost)
+if (NOT TARGET boost AND NOT TARGET CONAN_PKG::Boost)
     if (NOT Boost_INCLUDE_DIRS)
         find_package(Boost 1.57.0 REQUIRED)
     endif()
